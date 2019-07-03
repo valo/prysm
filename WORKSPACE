@@ -1097,3 +1097,9 @@ go_repository(
     commit = "4a0ed625a78b6858dc8d3a55fb7728968b712122",
     importpath = "github.com/koron/go-ssdp",
 )
+
+go_repository(
+    name = "com_github_go_interpreter_wagon",
+    commit = "7e800ab3530cb35d8dc8a6f631a108c62779a979",
+    importpath = "github.com/go-interpreter/wagon",
+)

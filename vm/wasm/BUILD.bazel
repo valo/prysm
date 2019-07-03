@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["runner.go"],
+    importpath = "github.com/prysmaticlabs/prysm/vm/wasm",
+    visibility = ["//visibility:public"],
+    data = ["add.wasm", "main.wasm"],
+    deps = [
+        "@com_github_go_interpreter_wagon//exec:go_default_library",
+        "@com_github_go_interpreter_wagon//wasm:go_default_library",
+    ],
+)
+
+go_binary(
+    name = "wasm",
+    data = ["add.wasm", "main.wasm"],
+    embed = [":go_default_library"],
+    visibility = ["//visibility:public"],
+)
