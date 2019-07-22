@@ -20,7 +20,7 @@ func TestInitFeatureConfig(t *testing.T) {
 func TestConfigureBeaconConfig(t *testing.T) {
 	app := cli.NewApp()
 	set := flag.NewFlagSet("test", 0)
-	set.Bool(NoGenesisDelayFlag.Name, true, "enable attestation verification")
+	set.Bool(NoGenesisDelayFlag.Name, true, "enable no genesis time delay")
 	context := cli.NewContext(app, set, nil)
 	ConfigureBeaconFeatures(context)
 	if c := FeatureConfig(); !c.NoGenesisDelay {
