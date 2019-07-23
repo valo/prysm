@@ -375,5 +375,6 @@ message ValidatorParticipation {
 }
 
 message AttestationPoolResponse {
-  repeated Attestation attestations = 1;
+    repeated Attestation attestations = 1;
 }
+
