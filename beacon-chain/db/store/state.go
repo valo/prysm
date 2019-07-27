@@ -1,13 +1,11 @@
 package store
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/boltdb/bolt"
 	"github.com/prysmaticlabs/go-ssz"
 	pb "github.com/prysmaticlabs/prysm/proto/beacon/p2p/v1"
-
 )
 
 // CanonicalState retrieves the latest, canonical state from the db.
@@ -48,7 +46,7 @@ func (b *BeaconDB) getState(bucket []byte, key []byte) (*pb.BeaconState, error) 
 		if enc == nil {
 			return fmt.Errorf("no item found for key: %s", key)
 		}
-        return ssz.Unmarshal(enc, beaconState)
+		return ssz.Unmarshal(enc, beaconState)
 	}); err != nil {
 		return nil, err
 	}
