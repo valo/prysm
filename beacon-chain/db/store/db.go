@@ -32,7 +32,14 @@ func NewDB(dirPath string) (*BeaconDB, error) {
 	beaconDB := &BeaconDB{db: boltDB, DatabasePath: dirPath}
 
 	if err := beaconDB.db.Update(func(tx *bolt.Tx) error {
-		return createBuckets(tx)
+		return createBuckets(
+			tx,
+			chainMetadataBucket,
+			stateBucket,
+			blocksBucket,
+			operationsBucket,
+			validatorsBucket,
+		)
 	}); err != nil {
 		return nil, err
 	}
