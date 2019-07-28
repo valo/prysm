@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/boltdb/bolt"
-	"github.com/prysmaticlabs/go-ssz"
+	"github.com/gogo/protobuf/proto"
 	pb "github.com/prysmaticlabs/prysm/proto/beacon/p2p/v1"
 )
 
@@ -25,17 +25,29 @@ func (b *BeaconDB) JustifiedState() (*pb.BeaconState, error) {
 
 // SaveCanonicalState saves the latest, canonical state to the db.
 func (b *BeaconDB) SaveCanonicalState(beaconState *pb.BeaconState) error {
-	return b.put(stateBucket, canonicalStateKey, beaconState)
+	enc, err := proto.Marshal(beaconState)
+	if err != nil {
+		return err
+	}
+	return b.put(stateBucket, canonicalStateKey, enc)
 }
 
 // SaveFinalizedState saves the finalized state to the db.
 func (b *BeaconDB) SaveFinalizedState(beaconState *pb.BeaconState) error {
-	return b.put(stateBucket, finalizedStateKey, beaconState)
+	enc, err := proto.Marshal(beaconState)
+	if err != nil {
+		return err
+	}
+	return b.put(stateBucket, finalizedStateKey, enc)
 }
 
 // SaveJustifiedState saves the justified state to the db.
 func (b *BeaconDB) SaveJustifiedState(beaconState *pb.BeaconState) error {
-	return b.put(stateBucket, justifiedStateKey, beaconState)
+	enc, err := proto.Marshal(beaconState)
+	if err != nil {
+		return err
+	}
+	return b.put(stateBucket, justifiedStateKey, enc)
 }
 
 func (b *BeaconDB) getState(bucket []byte, key []byte) (*pb.BeaconState, error) {
@@ -46,20 +58,16 @@ func (b *BeaconDB) getState(bucket []byte, key []byte) (*pb.BeaconState, error) 
 		if enc == nil {
 			return fmt.Errorf("no item found for key: %s", key)
 		}
-		return ssz.Unmarshal(enc, beaconState)
+		return proto.Unmarshal(enc, beaconState)
 	}); err != nil {
 		return nil, err
 	}
 	return beaconState, nil
 }
 
-func (b *BeaconDB) put(bucket []byte, key []byte, item interface{}) error {
+func (b *BeaconDB) put(bucket []byte, key []byte, value []byte) error {
 	return b.db.Update(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket(bucket)
-		enc, err := ssz.Marshal(item)
-		if err != nil {
-			return err
-		}
-		return bkt.Put(key, enc)
+		return bkt.Put(key, value)
 	})
 }
