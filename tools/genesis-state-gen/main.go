@@ -72,9 +72,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("Could not generate deposits from the deposit data provided: %v", err)
 	}
-	root := trie.Root()
+	depositRoot, err := ssz.HashTreeRootWithCapacity(depositDataItems, 1<<params.BeaconConfig().DepositContractTreeDepth)
+	if err != nil {
+		log.Fatalf("Could not hash tree root deposits: %v", err)
+	}
 	genesisState, err := state.GenesisBeaconState(deposits, *genesisTime, &ethpb.Eth1Data{
-		DepositRoot:  root[:],
+		DepositRoot:  depositRoot[:],
 		DepositCount: uint64(len(deposits)),
 		BlockHash:    mockEth1BlockHash,
 	})
@@ -203,8 +206,9 @@ func createDepositData(privKey *bls.SecretKey, pubKey *bls.PublicKey) (*ethpb.De
 //   withdrawal_credentials[1:] == hash(withdrawal_pubkey)[1:]
 // where withdrawal_credentials is of type bytes32.
 func withdrawalCredentialsHash(pubKey []byte) []byte {
-	h := hashutil.HashKeccak256(pubKey)
-	return append([]byte{blsWithdrawalPrefixByte}, h[0:]...)[:32]
+	h := hashutil.Hash(pubKey)
+	h[0] = blsWithdrawalPrefixByte
+	return h[:]
 }
 
 // Switch the endianness of a byte slice by reversing its order.
