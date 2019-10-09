@@ -16,14 +16,14 @@ import (
 	"go.opencensus.io/trace"
 )
 
-// Attestation retrieval by attestation data root.
-func (k *Store) Attestation(ctx context.Context, attDataRoot [32]byte) (*ethpb.Attestation, error) {
+// Attestation retrieval by attestation signing root.
+func (k *Store) Attestation(ctx context.Context, attRoot [32]byte) (*ethpb.Attestation, error) {
 	ctx, span := trace.StartSpan(ctx, "BeaconDB.Attestation")
 	defer span.End()
 	var att *ethpb.Attestation
 	err := k.db.View(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket(attestationsBucket)
-		enc := bkt.Get(attDataRoot[:])
+		enc := bkt.Get(attRoot[:])
 		if enc == nil {
 			return nil
 		}
@@ -53,7 +53,7 @@ func (k *Store) Attestations(ctx context.Context, f *filters.QueryFilter) ([]*et
 		if err != nil {
 			return errors.Wrap(err, "could not determine lookup indices")
 		}
-		// Once we have a list of attestation data roots that correspond to each
+		// Once we have a list of attestation signing roots that correspond to each
 		// lookup index, we find the intersection across all of them and use
 		// that list of roots to lookup the attestations. These attestations will
 		// meet the filter criteria.
@@ -71,27 +71,27 @@ func (k *Store) Attestations(ctx context.Context, f *filters.QueryFilter) ([]*et
 	return atts, err
 }
 
-// HasAttestation checks if an attestation by its attestation data root exists in the db.
-func (k *Store) HasAttestation(ctx context.Context, attDataRoot [32]byte) bool {
+// HasAttestation checks if an attestation by its attestation signing root exists in the db.
+func (k *Store) HasAttestation(ctx context.Context, attRoot [32]byte) bool {
 	ctx, span := trace.StartSpan(ctx, "BeaconDB.HasAttestation")
 	defer span.End()
 	exists := false
 	// #nosec G104. Always returns nil.
 	k.db.View(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket(attestationsBucket)
-		exists = bkt.Get(attDataRoot[:]) != nil
+		exists = bkt.Get(attRoot[:]) != nil
 		return nil
 	})
 	return exists
 }
 
-// DeleteAttestation by attestation data root.
-func (k *Store) DeleteAttestation(ctx context.Context, attDataRoot [32]byte) error {
+// DeleteAttestation by attestation signing root.
+func (k *Store) DeleteAttestation(ctx context.Context, attRoot [32]byte) error {
 	ctx, span := trace.StartSpan(ctx, "BeaconDB.DeleteAttestation")
 	defer span.End()
 	return k.db.Batch(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket(attestationsBucket)
-		enc := bkt.Get(attDataRoot[:])
+		enc := bkt.Get(attRoot[:])
 		if enc == nil {
 			return nil
 		}
@@ -100,21 +100,21 @@ func (k *Store) DeleteAttestation(ctx context.Context, attDataRoot [32]byte) err
 			return err
 		}
 		indicesByBucket := createAttestationIndicesFromData(att.Data, tx)
-		if err := deleteValueForIndices(indicesByBucket, attDataRoot[:], tx); err != nil {
+		if err := deleteValueForIndices(indicesByBucket, attRoot[:], tx); err != nil {
 			return errors.Wrap(err, "could not delete root for DB indices")
 		}
-		return bkt.Delete(attDataRoot[:])
+		return bkt.Delete(attRoot[:])
 	})
 }
 
-// DeleteAttestations by attestation data roots.
-func (k *Store) DeleteAttestations(ctx context.Context, attDataRoots [][32]byte) error {
+// DeleteAttestations by attestation signing roots.
+func (k *Store) DeleteAttestations(ctx context.Context, attRoots [][32]byte) error {
 	ctx, span := trace.StartSpan(ctx, "BeaconDB.DeleteAttestations")
 	defer span.End()
 	var wg sync.WaitGroup
 	errs := make([]string, 0)
-	wg.Add(len(attDataRoots))
-	for _, r := range attDataRoots {
+	wg.Add(len(attRoots))
+	for _, r := range attRoots {
 		go func(w *sync.WaitGroup, root [32]byte) {
 			defer wg.Done()
 			if err := k.DeleteAttestation(ctx, root); err != nil {
@@ -136,7 +136,7 @@ func (k *Store) SaveAttestation(ctx context.Context, att *ethpb.Attestation) err
 	ctx, span := trace.StartSpan(ctx, "BeaconDB.SaveAttestation")
 	defer span.End()
 	return k.db.Batch(func(tx *bolt.Tx) error {
-		attDataRoot, err := ssz.HashTreeRoot(att.Data)
+		attRoot, err := ssz.SigningRoot(att)
 		if err != nil {
 			return err
 		}
@@ -146,10 +146,10 @@ func (k *Store) SaveAttestation(ctx context.Context, att *ethpb.Attestation) err
 		}
 		bkt := tx.Bucket(attestationsBucket)
 		indicesByBucket := createAttestationIndicesFromData(att.Data, tx)
-		if err := updateValueForIndices(indicesByBucket, attDataRoot[:], tx); err != nil {
+		if err := updateValueForIndices(indicesByBucket, attRoot[:], tx); err != nil {
 			return errors.Wrap(err, "could not update DB indices")
 		}
-		return bkt.Put(attDataRoot[:], enc)
+		return bkt.Put(attRoot[:], enc)
 	})
 }
 
@@ -214,7 +214,7 @@ func createAttestationIndicesFromData(attData *ethpb.AttestationData, tx *bolt.T
 // a list of of byte keys used to retrieve the values stored
 // for the indices from the DB.
 //
-// For attestations, these are list of hash tree roots of attestation.Data
+// For attestations, these are list of their signing roots.
 // objects. If a certain filter criterion does not apply to
 // attestations, an appropriate error is returned.
 func createAttestationIndicesFromFilters(f *filters.QueryFilter) (map[string][]byte, error) {

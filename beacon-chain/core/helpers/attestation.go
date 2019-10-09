@@ -53,14 +53,13 @@ func AttestationDataSlot(state *pb.BeaconState, data *ethpb.AttestationData) (ui
 }
 
 // AggregateAttestation aggregates attestations a1 and a2 together.
+// Attestations with overlapping bits in their bitfields cannot be aggregated.
+// Ex: 010 and 110 cannot aggregate, but 010 and 101 can.
 func AggregateAttestation(a1 *ethpb.Attestation, a2 *ethpb.Attestation) (*ethpb.Attestation, error) {
 	baseAtt := proto.Clone(a1).(*ethpb.Attestation)
 	newAtt := proto.Clone(a2).(*ethpb.Attestation)
-	if newAtt.AggregationBits.Count() > baseAtt.AggregationBits.Count() {
-		baseAtt, newAtt = newAtt, baseAtt
-	}
 
-	if baseAtt.AggregationBits.Contains(newAtt.AggregationBits) {
+	if baseAtt.AggregationBits.Overlaps(newAtt.AggregationBits) {
 		return baseAtt, nil
 	}
 
