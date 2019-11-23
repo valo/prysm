@@ -36,7 +36,6 @@ type Store struct {
 	db                   db.Database
 	justifiedCheckpt     *ethpb.Checkpoint
 	finalizedCheckpt     *ethpb.Checkpoint
-	checkPointLock       sync.RWMutex
 	prevFinalizedCheckpt *ethpb.Checkpoint
 	checkpointState      *cache.CheckpointStateCache
 	checkpointStateLock  sync.Mutex
@@ -79,11 +78,9 @@ func (s *Store) GenesisStore(
 	justifiedCheckpoint *ethpb.Checkpoint,
 	finalizedCheckpoint *ethpb.Checkpoint) error {
 
-	s.checkPointLock.Lock()
 	s.justifiedCheckpt = proto.Clone(justifiedCheckpoint).(*ethpb.Checkpoint)
 	s.finalizedCheckpt = proto.Clone(finalizedCheckpoint).(*ethpb.Checkpoint)
 	s.prevFinalizedCheckpt = proto.Clone(finalizedCheckpoint).(*ethpb.Checkpoint)
-	s.checkPointLock.Unlock()
 
 	justifiedState, err := s.db.State(ctx, bytesutil.ToBytes32(s.justifiedCheckpt.Root))
 	if err != nil {
@@ -248,14 +245,10 @@ func (s *Store) Head(ctx context.Context) ([]byte, error) {
 
 // JustifiedCheckpt returns the latest justified check point from fork choice store.
 func (s *Store) JustifiedCheckpt() *ethpb.Checkpoint {
-	s.checkPointLock.RLock()
-	defer s.checkPointLock.RUnlock()
 	return proto.Clone(s.justifiedCheckpt).(*ethpb.Checkpoint)
 }
 
 // FinalizedCheckpt returns the latest finalized check point from fork choice store.
 func (s *Store) FinalizedCheckpt() *ethpb.Checkpoint {
-	s.checkPointLock.RLock()
-	defer s.checkPointLock.RUnlock()
 	return proto.Clone(s.finalizedCheckpt).(*ethpb.Checkpoint)
 }
