@@ -8,7 +8,9 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
+	"github.com/prysmaticlabs/go-ssz"
 	"github.com/prysmaticlabs/prysm/beacon-chain/cache"
+	"github.com/prysmaticlabs/prysm/beacon-chain/core/blocks"
 	"github.com/prysmaticlabs/prysm/beacon-chain/core/helpers"
 	"github.com/prysmaticlabs/prysm/beacon-chain/db"
 	"github.com/prysmaticlabs/prysm/beacon-chain/db/filters"
@@ -44,6 +46,7 @@ type Store struct {
 	seenAttsLock         sync.Mutex
 	latestVoteMap        map[uint64]*pb.ValidatorLatestVote
 	voteLock             sync.RWMutex
+	initSyncState        map[[32]byte]*pb.BeaconState
 }
 
 // NewForkChoiceService instantiates a new service instance that will
@@ -57,6 +60,7 @@ func NewForkChoiceService(ctx context.Context, db db.Database) *Store {
 		checkpointState: cache.NewCheckpointStateCache(),
 		latestVoteMap:   make(map[uint64]*pb.ValidatorLatestVote),
 		seenAtts:        make(map[[32]byte]bool),
+		initSyncState:   make(map[[32]byte]*pb.BeaconState),
 	}
 }
 
@@ -97,6 +101,23 @@ func (s *Store) GenesisStore(
 	}); err != nil {
 		return errors.Wrap(err, "could not save genesis state in check point cache")
 	}
+
+	genesisState, err := s.db.GenesisState(ctx)
+	if err != nil {
+		return err
+	}
+
+	stateRoot, err := ssz.HashTreeRoot(genesisState)
+	if err != nil {
+		return errors.Wrap(err, "could not tree hash genesis state")
+	}
+	genesisBlk := blocks.NewGenesisBlock(stateRoot[:])
+	genesisBlkRoot, err := ssz.SigningRoot(genesisBlk)
+	if err != nil {
+		return errors.Wrap(err, "could not get genesis block root")
+	}
+
+	s.initSyncState[genesisBlkRoot] = genesisState
 
 	return nil
 }

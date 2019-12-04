@@ -175,9 +175,11 @@ func (s *Store) OnBlockInitialSyncStateTransition(ctx context.Context, b *ethpb.
 	if err != nil {
 		return errors.Wrapf(err, "could not get signing root of block %d", b.Slot)
 	}
-	if err := s.db.SaveState(ctx, postState, root); err != nil {
-		return errors.Wrap(err, "could not save state")
-	}
+	//if err := s.db.SaveState(ctx, postState, root); err != nil {
+	//	return errors.Wrap(err, "could not save state")
+	//}
+	s.initSyncState[root] = postState
+	delete(s.initSyncState, bytesutil.ToBytes32(b.ParentRoot))
 
 	// Update justified check point.
 	if postState.CurrentJustifiedCheckpoint.Epoch > s.JustifiedCheckpt().Epoch {
@@ -205,9 +207,9 @@ func (s *Store) OnBlockInitialSyncStateTransition(ctx context.Context, b *ethpb.
 			}
 		}
 
-		if err := s.db.SaveFinalizedCheckpoint(ctx, postState.FinalizedCheckpoint); err != nil {
-			return errors.Wrap(err, "could not save finalized checkpoint")
-		}
+		//if err := s.db.SaveFinalizedCheckpoint(ctx, postState.FinalizedCheckpoint); err != nil {
+		//	return errors.Wrap(err, "could not save finalized checkpoint")
+		//}
 
 		s.prevFinalizedCheckpt = s.finalizedCheckpt
 		s.finalizedCheckpt = postState.FinalizedCheckpoint
@@ -324,10 +326,11 @@ func (s *Store) updateBlockAttestationVote(ctx context.Context, att *ethpb.Attes
 
 // verifyBlkPreState validates input block has a valid pre-state.
 func (s *Store) verifyBlkPreState(ctx context.Context, b *ethpb.BeaconBlock) (*pb.BeaconState, error) {
-	preState, err := s.db.State(ctx, bytesutil.ToBytes32(b.ParentRoot))
-	if err != nil {
-		return nil, errors.Wrapf(err, "could not get pre state for slot %d", b.Slot)
-	}
+	//preState, err := s.db.State(ctx, bytesutil.ToBytes32(b.ParentRoot))
+	//if err != nil {
+	//	return nil, errors.Wrapf(err, "could not get pre state for slot %d", b.Slot)
+	//}
+	preState := s.initSyncState[bytesutil.ToBytes32(b.ParentRoot)]
 	if preState == nil {
 		return nil, fmt.Errorf("pre state of slot %d does not exist", b.Slot)
 	}
