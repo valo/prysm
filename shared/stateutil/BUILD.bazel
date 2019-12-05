@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "go_default_library",
     srcs = [
+        "arrays.go",
         "attestations.go",
         "blocks.go",
         "helpers.go",
@@ -16,6 +17,8 @@ go_library(
         "//shared/bytesutil:go_default_library",
         "//shared/hashutil:go_default_library",
         "//shared/params:go_default_library",
+        "@com_github_dgraph_io_ristretto//:go_default_library",
+        "@com_github_minio_highwayhash//:go_default_library",
         "@com_github_minio_sha256_simd//:go_default_library",
         "@com_github_pkg_errors//:go_default_library",
         "@com_github_protolambda_zssz//htr:go_default_library",
