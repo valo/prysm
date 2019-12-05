@@ -327,7 +327,6 @@ func (s *Service) initializeChainInfo(ctx context.Context) error {
 
 	s.headSlot = s.headBlock.Slot
 	s.canonicalRoots[s.headSlot] = finalized.Root
-	log.Error(s.headBlock.Slot, finalized.Root)
 
 	return nil
 }

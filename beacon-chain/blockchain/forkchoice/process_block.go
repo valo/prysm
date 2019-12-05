@@ -177,7 +177,7 @@ func (s *Store) OnBlockInitialSyncStateTransition(ctx context.Context, b *ethpb.
 	if err != nil {
 		return errors.Wrapf(err, "could not get signing root of block %d", b.Slot)
 	}
-	if featureconfig.Get().InitSyncCacheState{
+	if featureconfig.Get().InitSyncCacheState {
 		s.initSyncState[root] = postState
 	} else {
 		if err := s.db.SaveState(ctx, postState, root); err != nil {
@@ -211,20 +211,22 @@ func (s *Store) OnBlockInitialSyncStateTransition(ctx context.Context, b *ethpb.
 			}
 		}
 
-		finalizedRoot := bytesutil.ToBytes32(postState.FinalizedCheckpoint.Root)
-		fs := s.initSyncState[finalizedRoot]
+		if featureconfig.Get().InitSyncCacheState {
+			finalizedRoot := bytesutil.ToBytes32(postState.FinalizedCheckpoint.Root)
+			fs := s.initSyncState[finalizedRoot]
 
-		if err := s.db.SaveState(ctx, fs, finalizedRoot); err != nil {
-			return errors.Wrap(err, "could not save state")
+			if err := s.db.SaveState(ctx, fs, finalizedRoot); err != nil {
+				return errors.Wrap(err, "could not save state")
+			}
+			for r, oldState := range s.initSyncState {
+				if oldState.Slot < postState.FinalizedCheckpoint.Epoch*params.BeaconConfig().SlotsPerEpoch {
+					delete(s.initSyncState, r)
+				}
+			}
 		}
+
 		if err := s.db.SaveFinalizedCheckpoint(ctx, postState.FinalizedCheckpoint); err != nil {
 			return errors.Wrap(err, "could not save finalized checkpoint")
-		}
-
-		for r, oldState := range s.initSyncState {
-			if oldState.Slot < postState.FinalizedCheckpoint.Epoch*params.BeaconConfig().SlotsPerEpoch {
-				delete(s.initSyncState, r)
-			}
 		}
 
 		s.prevFinalizedCheckpt = s.finalizedCheckpt
@@ -246,6 +248,13 @@ func (s *Store) OnBlockInitialSyncStateTransition(ctx context.Context, b *ethpb.
 	// Epoch boundary bookkeeping such as logging epoch summaries.
 	if helpers.IsEpochStart(postState.Slot) {
 		reportEpochMetrics(postState)
+
+		// Update committee shuffled indices at the end of every epoch
+		if featureconfig.Get().EnableNewCache {
+			if err := helpers.UpdateCommitteeCache(postState); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
@@ -335,18 +344,29 @@ func (s *Store) updateBlockAttestationVote(ctx context.Context, att *ethpb.Attes
 
 // verifyBlkPreState validates input block has a valid pre-state.
 func (s *Store) verifyBlkPreState(ctx context.Context, b *ethpb.BeaconBlock) (*pb.BeaconState, error) {
-	preState := s.initSyncState[bytesutil.ToBytes32(b.ParentRoot)]
-	var err error
-	if preState == nil {
-		preState, err = s.db.State(ctx, bytesutil.ToBytes32(b.ParentRoot))
-		if err != nil {
-			return nil, errors.Wrapf(err, "could not get pre state for slot %d", b.Slot)
-		}
+	if featureconfig.Get().InitSyncCacheState {
+		preState := s.initSyncState[bytesutil.ToBytes32(b.ParentRoot)]
+		var err error
 		if preState == nil {
-			return nil, fmt.Errorf("pre state of slot %d does not exist", b.Slot)
+			preState, err = s.db.State(ctx, bytesutil.ToBytes32(b.ParentRoot))
+			if err != nil {
+				return nil, errors.Wrapf(err, "could not get pre state for slot %d", b.Slot)
+			}
+			if preState == nil {
+				return nil, fmt.Errorf("pre state of slot %d does not exist", b.Slot)
+			}
 		}
+		return proto.Clone(preState).(*pb.BeaconState), nil
 	}
-	return proto.Clone(preState).(*pb.BeaconState), nil
+
+	preState, err := s.db.State(ctx, bytesutil.ToBytes32(b.ParentRoot))
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not get pre state for slot %d", b.Slot)
+	}
+	if preState == nil {
+		return nil, fmt.Errorf("pre state of slot %d does not exist", b.Slot)
+	}
+	return preState, nil
 }
 
 // verifyBlkDescendant validates input block root is a descendant of the

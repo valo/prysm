@@ -17,6 +17,7 @@ import (
 	pb "github.com/prysmaticlabs/prysm/proto/beacon/p2p/v1"
 	"github.com/prysmaticlabs/prysm/shared/bytesutil"
 	"github.com/prysmaticlabs/prysm/shared/params"
+	"github.com/terencechain/prysm-phase2/shared/featureconfig"
 	"go.opencensus.io/trace"
 )
 
@@ -102,22 +103,22 @@ func (s *Store) GenesisStore(
 		return errors.Wrap(err, "could not save genesis state in check point cache")
 	}
 
-	genesisState, err := s.db.GenesisState(ctx)
-	if err != nil {
-		return err
+	if featureconfig.Get().InitSyncCacheState {
+		genesisState, err := s.db.GenesisState(ctx)
+		if err != nil {
+			return err
+		}
+		stateRoot, err := ssz.HashTreeRoot(genesisState)
+		if err != nil {
+			return errors.Wrap(err, "could not tree hash genesis state")
+		}
+		genesisBlk := blocks.NewGenesisBlock(stateRoot[:])
+		genesisBlkRoot, err := ssz.SigningRoot(genesisBlk)
+		if err != nil {
+			return errors.Wrap(err, "could not get genesis block root")
+		}
+		s.initSyncState[genesisBlkRoot] = genesisState
 	}
-
-	stateRoot, err := ssz.HashTreeRoot(genesisState)
-	if err != nil {
-		return errors.Wrap(err, "could not tree hash genesis state")
-	}
-	genesisBlk := blocks.NewGenesisBlock(stateRoot[:])
-	genesisBlkRoot, err := ssz.SigningRoot(genesisBlk)
-	if err != nil {
-		return errors.Wrap(err, "could not get genesis block root")
-	}
-
-	s.initSyncState[genesisBlkRoot] = genesisState
 
 	return nil
 }
