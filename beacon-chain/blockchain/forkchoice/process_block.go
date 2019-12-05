@@ -213,12 +213,12 @@ func (s *Store) OnBlockInitialSyncStateTransition(ctx context.Context, b *ethpb.
 		}
 
 		if featureconfig.Get().InitSyncCacheState {
-			//finalizedRoot := bytesutil.ToBytes32(postState.FinalizedCheckpoint.Root)
-			//fs := s.initSyncState[finalizedRoot]
+			finalizedRoot := bytesutil.ToBytes32(postState.FinalizedCheckpoint.Root)
+			fs := s.initSyncState[finalizedRoot]
 			if postState.FinalizedCheckpoint.Epoch % 10 == 0 {
-				//if err := s.db.SaveState(ctx, fs, finalizedRoot); err != nil {
-				//	return errors.Wrap(err, "could not save state")
-				//}
+				if err := s.db.SaveState(ctx, fs, finalizedRoot); err != nil {
+					return errors.Wrap(err, "could not save state")
+				}
 				if err := s.db.SaveFinalizedCheckpoint(ctx, postState.FinalizedCheckpoint); err != nil {
 					return errors.Wrap(err, "could not save finalized checkpoint")
 				}
