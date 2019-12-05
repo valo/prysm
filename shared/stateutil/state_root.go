@@ -49,14 +49,14 @@ func HashTreeRootState(state *pb.BeaconState) ([32]byte, error) {
 	fieldRoots[3] = headerHashTreeRoot[:]
 
 	// BlockRoots array root.
-	blockRootsRoot, err := blockRoots(state.BlockRoots)
+	blockRootsRoot, err := bitwiseMerkleize(state.BlockRoots, uint64(len(state.BlockRoots)), uint64(len(state.BlockRoots)))
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "could not compute block roots merkleization")
 	}
 	fieldRoots[4] = blockRootsRoot[:]
 
 	// StateRoots array root.
-	stateRootsRoot, err := stateRoots(state.StateRoots)
+	stateRootsRoot, err := bitwiseMerkleize(state.StateRoots, uint64(len(state.StateRoots)), uint64(len(state.StateRoots)))
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "could not compute state roots merkleization")
 	}
@@ -104,18 +104,28 @@ func HashTreeRootState(state *pb.BeaconState) ([32]byte, error) {
 	fieldRoots[11] = balancesRoot[:]
 
 	// RandaoMixes array root.
-	randaoRootsRoot, err := randaoRoots(state.RandaoMixes)
+	randaoRootsRoot, err := bitwiseMerkleize(state.RandaoMixes, uint64(len(state.RandaoMixes)), uint64(len(state.RandaoMixes)))
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "could not compute randao roots merkleization")
 	}
 	fieldRoots[12] = randaoRootsRoot[:]
 
 	// Slashings array root.
-	slashingsRootsRoot, err := slashingsRoot(state.Slashings)
+	slashingMarshaling := make([][]byte, params.BeaconConfig().EpochsPerSlashingsVector)
+	for i := 0; i < len(slashingMarshaling); i++ {
+		slashBuf := make([]byte, 8)
+		binary.LittleEndian.PutUint64(slashBuf, state.Slashings[i])
+		slashingMarshaling[i] = slashBuf
+	}
+	slashingChunks, err := pack(slashingMarshaling)
+	if err != nil {
+		return [32]byte{}, errors.Wrap(err, "could not pack slashings into chunks")
+	}
+	slashingRootsRoot, err := bitwiseMerkleize(slashingChunks, uint64(len(slashingChunks)), uint64(len(slashingChunks)))
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "could not compute slashings merkleization")
 	}
-	fieldRoots[13] = slashingsRootsRoot[:]
+	fieldRoots[13] = slashingRootsRoot[:]
 
 	// PreviousEpochAttestations slice root.
 	prevAttsRoot, err := epochAttestationsRoot(state.PreviousEpochAttestations)
@@ -202,30 +212,4 @@ func historicalRootsRoot(historicalRoots [][]byte) ([32]byte, error) {
 	copy(historicalRootsOutput, historicalRootsBuf.Bytes())
 	mixedLen := mixInLength(result, historicalRootsOutput)
 	return mixedLen, nil
-}
-
-func blockRoots(roots [][]byte) ([32]byte, error) {
-	return bitwiseMerkleize(roots, uint64(len(roots)), uint64(len(roots)))
-}
-
-func stateRoots(roots [][]byte) ([32]byte, error) {
-	return bitwiseMerkleize(roots, uint64(len(roots)), uint64(len(roots)))
-}
-
-func randaoRoots(roots [][]byte) ([32]byte, error) {
-	return bitwiseMerkleize(roots, uint64(len(roots)), uint64(len(roots)))
-}
-
-func slashingsRoot(slashings []uint64) ([32]byte, error) {
-	slashingMarshaling := make([][]byte, params.BeaconConfig().EpochsPerSlashingsVector)
-	for i := 0; i < len(slashingMarshaling); i++ {
-		slashBuf := make([]byte, 8)
-		binary.LittleEndian.PutUint64(slashBuf, slashings[i])
-		slashingMarshaling[i] = slashBuf
-	}
-	slashingChunks, err := pack(slashingMarshaling)
-	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not pack slashings into chunks")
-	}
-	return bitwiseMerkleize(slashingChunks, uint64(len(slashingChunks)), uint64(len(slashingChunks)))
 }
