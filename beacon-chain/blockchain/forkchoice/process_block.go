@@ -177,10 +177,13 @@ func (s *Store) OnBlockInitialSyncStateTransition(ctx context.Context, b *ethpb.
 	if err != nil {
 		return errors.Wrapf(err, "could not get signing root of block %d", b.Slot)
 	}
-	//if err := s.db.SaveState(ctx, postState, root); err != nil {
-	//	return errors.Wrap(err, "could not save state")
-	//}
-	s.initSyncState[root] = postState
+	if featureconfig.Get().InitSyncCacheState{
+		s.initSyncState[root] = postState
+	} else {
+		if err := s.db.SaveState(ctx, postState, root); err != nil {
+			return errors.Wrap(err, "could not save state")
+		}
+	}
 
 	// Update justified check point.
 	if postState.CurrentJustifiedCheckpoint.Epoch > s.JustifiedCheckpt().Epoch {
