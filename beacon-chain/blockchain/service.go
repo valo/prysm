@@ -91,16 +91,14 @@ func (s *Service) Start() {
 		log.Fatalf("Could not fetch beacon state: %v", err)
 	}
 
-	if featureconfig.Get().InitSyncCacheState {
-		cp, err := s.beaconDB.FinalizedCheckpoint(ctx)
+	cp, err := s.beaconDB.FinalizedCheckpoint(ctx)
+	if err != nil {
+		log.Fatalf("Could not fetch finalized cp: %v", err)
+	}
+	if beaconState == nil {
+		beaconState, err = s.beaconDB.State(ctx, bytesutil.ToBytes32(cp.Root))
 		if err != nil {
-			log.Fatalf("Could not fetch finalized cp: %v", err)
-		}
-		if beaconState == nil {
-			beaconState, err = s.beaconDB.State(ctx, bytesutil.ToBytes32(cp.Root))
-			if err != nil {
-				log.Fatalf("Could not fetch beacon state: %v", err)
-			}
+			log.Fatalf("Could not fetch beacon state: %v", err)
 		}
 	}
 
