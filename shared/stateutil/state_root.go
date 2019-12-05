@@ -15,26 +15,10 @@ import (
 const bytesPerChunk = 32
 const cacheSize = 100000
 
-var (
-	rootsCache  *ristretto.Cache
-	leavesCache *ristretto.Cache
-	layersCache *ristretto.Cache
-)
+var cache *ristretto.Cache
 
 func init() {
-	rootsCache, _ = ristretto.NewCache(&ristretto.Config{
-		NumCounters: cacheSize, // number of keys to track frequency of (1M).
-		MaxCost:     1 << 22,   // maximum cost of cache (3MB).
-		// 100,000 roots will take up approximately 3 MB in memory.
-		BufferItems: 64, // number of keys per Get buffer.
-	})
-	leavesCache, _ = ristretto.NewCache(&ristretto.Config{
-		NumCounters: cacheSize, // number of keys to track frequency of (1M).
-		MaxCost:     1 << 22,   // maximum cost of cache (3MB).
-		// 100,000 roots will take up approximately 3 MB in memory.
-		BufferItems: 64, // number of keys per Get buffer.
-	})
-	layersCache, _ = ristretto.NewCache(&ristretto.Config{
+	cache, _ = ristretto.NewCache(&ristretto.Config{
 		NumCounters: cacheSize, // number of keys to track frequency of (1M).
 		MaxCost:     1 << 22,   // maximum cost of cache (3MB).
 		// 100,000 roots will take up approximately 3 MB in memory.
@@ -78,14 +62,14 @@ func HashTreeRootState(state *pb.BeaconState) ([32]byte, error) {
 	fieldRoots[3] = headerHashTreeRoot[:]
 
 	// BlockRoots array root.
-	blockRootsRoot, err := ArraysRoot(state.BlockRoots, "BlockRoots")
+	blockRootsRoot, err := arraysRoot(state.BlockRoots, "BlockRoots")
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "could not compute block roots merkleization")
 	}
 	fieldRoots[4] = blockRootsRoot[:]
 
 	// StateRoots array root.
-	stateRootsRoot, err := ArraysRoot(state.StateRoots, "StateRoots")
+	stateRootsRoot, err := arraysRoot(state.StateRoots, "StateRoots")
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "could not compute state roots merkleization")
 	}
@@ -133,7 +117,7 @@ func HashTreeRootState(state *pb.BeaconState) ([32]byte, error) {
 	fieldRoots[11] = balancesRoot[:]
 
 	// RandaoMixes array root.
-	randaoRootsRoot, err := ArraysRoot(state.RandaoMixes, "RandaoMixes")
+	randaoRootsRoot, err := arraysRoot(state.RandaoMixes, "RandaoMixes")
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "could not compute randao roots merkleization")
 	}
