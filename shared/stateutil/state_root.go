@@ -62,14 +62,14 @@ func HashTreeRootState(state *pb.BeaconState) ([32]byte, error) {
 	fieldRoots[3] = headerHashTreeRoot[:]
 
 	// BlockRoots array root.
-	blockRootsRoot, err := arraysRoot(state.BlockRoots, "BlockRoots")
+	blockRootsRoot, err := blockRoots(state.BlockRoots)
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "could not compute block roots merkleization")
 	}
 	fieldRoots[4] = blockRootsRoot[:]
 
 	// StateRoots array root.
-	stateRootsRoot, err := arraysRoot(state.StateRoots, "StateRoots")
+	stateRootsRoot, err := stateRoots(state.StateRoots)
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "could not compute state roots merkleization")
 	}
@@ -117,7 +117,7 @@ func HashTreeRootState(state *pb.BeaconState) ([32]byte, error) {
 	fieldRoots[11] = balancesRoot[:]
 
 	// RandaoMixes array root.
-	randaoRootsRoot, err := arraysRoot(state.RandaoMixes, "RandaoMixes")
+	randaoRootsRoot, err := randaoRoots(state.RandaoMixes)
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "could not compute randao roots merkleization")
 	}
