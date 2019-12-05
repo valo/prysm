@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"github.com/prysmaticlabs/go-ssz"
@@ -18,6 +19,7 @@ import (
 	"github.com/prysmaticlabs/prysm/shared/bytesutil"
 	"github.com/prysmaticlabs/prysm/shared/featureconfig"
 	"github.com/prysmaticlabs/prysm/shared/hashutil"
+	"github.com/prysmaticlabs/prysm/shared/params"
 	"github.com/prysmaticlabs/prysm/shared/traceutil"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
@@ -179,7 +181,6 @@ func (s *Store) OnBlockInitialSyncStateTransition(ctx context.Context, b *ethpb.
 	//	return errors.Wrap(err, "could not save state")
 	//}
 	s.initSyncState[root] = postState
-	delete(s.initSyncState, bytesutil.ToBytes32(b.ParentRoot))
 
 	// Update justified check point.
 	if postState.CurrentJustifiedCheckpoint.Epoch > s.JustifiedCheckpt().Epoch {
@@ -207,9 +208,21 @@ func (s *Store) OnBlockInitialSyncStateTransition(ctx context.Context, b *ethpb.
 			}
 		}
 
-		//if err := s.db.SaveFinalizedCheckpoint(ctx, postState.FinalizedCheckpoint); err != nil {
-		//	return errors.Wrap(err, "could not save finalized checkpoint")
-		//}
+		finalizedRoot := bytesutil.ToBytes32(postState.FinalizedCheckpoint.Root)
+		fs := s.initSyncState[finalizedRoot]
+
+		if err := s.db.SaveState(ctx, fs, finalizedRoot); err != nil {
+			return errors.Wrap(err, "could not save state")
+		}
+		if err := s.db.SaveFinalizedCheckpoint(ctx, postState.FinalizedCheckpoint); err != nil {
+			return errors.Wrap(err, "could not save finalized checkpoint")
+		}
+
+		for r, oldState := range s.initSyncState {
+			if oldState.Slot < postState.FinalizedCheckpoint.Epoch*params.BeaconConfig().SlotsPerEpoch {
+				delete(s.initSyncState, r)
+			}
+		}
 
 		s.prevFinalizedCheckpt = s.finalizedCheckpt
 		s.finalizedCheckpt = postState.FinalizedCheckpoint
@@ -230,13 +243,6 @@ func (s *Store) OnBlockInitialSyncStateTransition(ctx context.Context, b *ethpb.
 	// Epoch boundary bookkeeping such as logging epoch summaries.
 	if helpers.IsEpochStart(postState.Slot) {
 		reportEpochMetrics(postState)
-
-		// Update committee shuffled indices at the end of every epoch
-		if featureconfig.Get().EnableNewCache {
-			if err := helpers.UpdateCommitteeCache(postState); err != nil {
-				return err
-			}
-		}
 	}
 
 	return nil
@@ -326,15 +332,18 @@ func (s *Store) updateBlockAttestationVote(ctx context.Context, att *ethpb.Attes
 
 // verifyBlkPreState validates input block has a valid pre-state.
 func (s *Store) verifyBlkPreState(ctx context.Context, b *ethpb.BeaconBlock) (*pb.BeaconState, error) {
-	//preState, err := s.db.State(ctx, bytesutil.ToBytes32(b.ParentRoot))
-	//if err != nil {
-	//	return nil, errors.Wrapf(err, "could not get pre state for slot %d", b.Slot)
-	//}
 	preState := s.initSyncState[bytesutil.ToBytes32(b.ParentRoot)]
+	var err error
 	if preState == nil {
-		return nil, fmt.Errorf("pre state of slot %d does not exist", b.Slot)
+		preState, err = s.db.State(ctx, bytesutil.ToBytes32(b.ParentRoot))
+		if err != nil {
+			return nil, errors.Wrapf(err, "could not get pre state for slot %d", b.Slot)
+		}
+		if preState == nil {
+			return nil, fmt.Errorf("pre state of slot %d does not exist", b.Slot)
+		}
 	}
-	return preState, nil
+	return proto.Clone(preState).(*pb.BeaconState), nil
 }
 
 // verifyBlkDescendant validates input block root is a descendant of the
