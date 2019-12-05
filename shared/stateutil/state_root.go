@@ -17,12 +17,24 @@ const cacheSize = 100000
 
 var (
 	rootsCache  *ristretto.Cache
-	leavesCache = make(map[string][][]byte)
-	layersCache = make(map[string][][][]byte)
+	leavesCache *ristretto.Cache
+	layersCache *ristretto.Cache
 )
 
 func init() {
 	rootsCache, _ = ristretto.NewCache(&ristretto.Config{
+		NumCounters: cacheSize, // number of keys to track frequency of (1M).
+		MaxCost:     1 << 22,   // maximum cost of cache (3MB).
+		// 100,000 roots will take up approximately 3 MB in memory.
+		BufferItems: 64, // number of keys per Get buffer.
+	})
+	leavesCache, _ = ristretto.NewCache(&ristretto.Config{
+		NumCounters: cacheSize, // number of keys to track frequency of (1M).
+		MaxCost:     1 << 22,   // maximum cost of cache (3MB).
+		// 100,000 roots will take up approximately 3 MB in memory.
+		BufferItems: 64, // number of keys per Get buffer.
+	})
+	layersCache, _ = ristretto.NewCache(&ristretto.Config{
 		NumCounters: cacheSize, // number of keys to track frequency of (1M).
 		MaxCost:     1 << 22,   // maximum cost of cache (3MB).
 		// 100,000 roots will take up approximately 3 MB in memory.
@@ -172,10 +184,6 @@ func HashTreeRootState(state *pb.BeaconState) ([32]byte, error) {
 		return [32]byte{}, errors.Wrap(err, "could not compute finalized checkpoint merkleization")
 	}
 	fieldRoots[19] = finalRoot[:]
-	//
-	//for i := 0; i < len(fieldRoots); i++ {
-	//	fmt.Printf("%#x and index %d\n", fieldRoots[i], i)
-	//}
 
 	root, err := bitwiseMerkleize(fieldRoots, uint64(len(fieldRoots)), uint64(len(fieldRoots)))
 	if err != nil {
