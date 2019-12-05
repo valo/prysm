@@ -213,21 +213,25 @@ func (s *Store) OnBlockInitialSyncStateTransition(ctx context.Context, b *ethpb.
 		}
 
 		if featureconfig.Get().InitSyncCacheState {
-			finalizedRoot := bytesutil.ToBytes32(postState.FinalizedCheckpoint.Root)
-			fs := s.initSyncState[finalizedRoot]
-
-			if err := s.db.SaveState(ctx, fs, finalizedRoot); err != nil {
-				return errors.Wrap(err, "could not save state")
-			}
-			for r, oldState := range s.initSyncState {
-				if oldState.Slot < postState.FinalizedCheckpoint.Epoch*params.BeaconConfig().SlotsPerEpoch {
-					delete(s.initSyncState, r)
+			//finalizedRoot := bytesutil.ToBytes32(postState.FinalizedCheckpoint.Root)
+			//fs := s.initSyncState[finalizedRoot]
+			if postState.FinalizedCheckpoint.Epoch % 10 == 0 {
+				//if err := s.db.SaveState(ctx, fs, finalizedRoot); err != nil {
+				//	return errors.Wrap(err, "could not save state")
+				//}
+				if err := s.db.SaveFinalizedCheckpoint(ctx, postState.FinalizedCheckpoint); err != nil {
+					return errors.Wrap(err, "could not save finalized checkpoint")
+				}
+				for r, oldState := range s.initSyncState {
+					if oldState.Slot < postState.FinalizedCheckpoint.Epoch*params.BeaconConfig().SlotsPerEpoch {
+						delete(s.initSyncState, r)
+					}
 				}
 			}
-		}
-
-		if err := s.db.SaveFinalizedCheckpoint(ctx, postState.FinalizedCheckpoint); err != nil {
-			return errors.Wrap(err, "could not save finalized checkpoint")
+		} else {
+			if err := s.db.SaveFinalizedCheckpoint(ctx, postState.FinalizedCheckpoint); err != nil {
+				return errors.Wrap(err, "could not save finalized checkpoint")
+			}
 		}
 
 		s.prevFinalizedCheckpt = s.finalizedCheckpt
