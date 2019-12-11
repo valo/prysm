@@ -1,11 +1,10 @@
-package main
+package wasm
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/sirupsen/logrus"
-	wasm "github.com/wasmerio/go-ext-wasm/wasmer"
+	"github.com/wasmerio/go-ext-wasm/wasmer"
 )
 
 type beaconState struct {
@@ -13,7 +12,9 @@ type beaconState struct {
 	ExecutionScripts [][]byte
 }
 
-type shardState struct {
+//ShardState describes struct for the state transition function
+//TODO(#0): Have other describes from buterin: https://notes.ethereum.org/@vbuterin/Bkoaj4xpN?type=view#Shard-processing
+type ShardState struct {
 	Slot              uint64
 	ExecEnvStateRoots [][32]byte
 }
@@ -28,15 +29,26 @@ type transaction struct {
 	Data             []byte
 }
 
+//Deposit can be returned by the executeCode metod
+//TODO(#0): use type from main beacon-chain code. For example Deposit from proto/eth/v1alpha1/beacon_block.pb.go
+type Deposit struct {
+	PubKey                [48]byte
+	WithdrawalCredentials [48]byte
+	Amount                uint64
+}
+
+var log = logrus.WithField("prefix", "wasm")
+
+//TODO(#0): move to _test file
 func main() {
 	// Reads the WebAssembly module as bytes.
-	// TODO: Load multiple execution environment scripts in initialization.
-	rawWasmCode, _ := wasm.ReadBytes("envs/naive-ee/wasm.wasm")
+	// TODO(#0): Load multiple execution environment scripts in initialization.
+	rawWasmCode, _ := wasmer.ReadBytes("tests/wasm.wasm")
 	bState := &beaconState{
 		Slot:             0,
 		ExecutionScripts: [][]byte{rawWasmCode},
 	}
-	sState := &shardState{
+	sState := &ShardState{
 		Slot:              0,
 		ExecEnvStateRoots: make([][32]byte, 1),
 	}
@@ -63,12 +75,13 @@ func main() {
 		"slot",
 		block.Slot,
 	).Info("Processing shard block")
-	if _, err := processShardBlock(bState, sState, block); err != nil {
+	if _, err := ProcessShardBlock(bState, sState, block); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func processShardBlock(bState *beaconState, sState *shardState, block *shardBlock) (*shardState, error) {
+//ProcessShardBlock is the state transition function
+func ProcessShardBlock(bState *beaconState, sState *ShardState, block *shardBlock) (*ShardState, error) {
 	for i := 0; i < len(block.Transactions); i++ {
 		tx := block.Transactions[i]
 		code := bState.ExecutionScripts[tx.EnvironmentIndex]
@@ -78,7 +91,8 @@ func processShardBlock(bState *beaconState, sState *shardState, block *shardBloc
 			"environmentIndex": tx.EnvironmentIndex,
 			"transactionID":    i,
 		}).Info("Running WASM code for shard block transaction")
-		shardPostStateRoot, err := executeCode(code, shardPreStateRoot, tx.Data)
+		//TODO(#0): receive and process deposits from executeCode
+		shardPostStateRoot, _ /*deposits*/, err := executeCode(code, shardPreStateRoot, tx.Data)
 		if err != nil {
 			return nil, err
 		}
@@ -89,30 +103,4 @@ func processShardBlock(bState *beaconState, sState *shardState, block *shardBloc
 		}).Info("Updated shard state root for environment index")
 	}
 	return sState, nil
-}
-
-func executeCode(code []byte, preStateRoot [32]byte, shardData []byte) ([32]byte, error) {
-	// Instantiates the WebAssembly module.
-	imports := wasm.NewImports().Namespace("env")
-	instance, err := wasm.NewInstanceWithImports(code, imports)
-	if err != nil {
-		fmt.Println(wasm.GetLastError())
-		return [32]byte{}, err
-	}
-	defer instance.Close()
-	sum := instance.Exports["sum"]
-	fmt.Println(instance.Exports)
-	res, _ := sum(2, 3)
-	fmt.Println(res)
-	//processBlock := instance.Exports["processBlock"]
-	//
-	//// Calls that exported function with Go standard values. The WebAssembly
-	//// types are inferred and values are casted automatically.
-	//postStateRoot, err := processBlock(preStateRoot, shardData)
-	//if err != nil {
-	//	return [32]byte{}, err
-	//}
-	//logrus.Infof("Code ran successfully - result = %s", postStateRoot.String())
-	//return postStateRoot.ToVoid().([32]byte), nil
-	return [32]byte{}, nil
 }
